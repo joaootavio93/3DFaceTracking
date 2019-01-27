@@ -1,3 +1,12 @@
+# My excludes
+.project
+.pydevproject
+face3d/BFM/BFM.mat
+
+.settings/
+data/
+face3d/mesh/build/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

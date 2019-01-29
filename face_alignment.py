@@ -273,8 +273,7 @@ def extract_pose_from_param(param):
         ndarray: The camera matrix (rotation + translation).
     """
     param = param * param_std + param_mean
-    pose = param[:12]
-    pose = pose.reshape(3, -1)  
+    pose = param[:12].reshape(3, -1)  
     scale, rotation, t3d = decompose_camera_matrix(pose)    
     yaw, pitch, roll = rotation_matrix_to_euler_angles(rotation) 
     cam_matrix = np.concatenate((rotation, t3d.reshape(3, -1)), axis=1)
@@ -299,18 +298,19 @@ def parse_param(param):
     alpha_exp = param[52:].reshape(-1, 1)
     return pose, offset, alpha_shp, alpha_exp
 
-def predict_landmarks(param, bbox):
+def predict_landmarks(param, bbox, dense=False):
     """ Predicts the 68 face landmarks from a 3D face, scaling them by the face bounding box.
     
     Parameters:
         param (ndarray): Contains 3DMM params (12-pose, 40-shape, 10-expression). 
         bbox (array): The face bounding box.
+        dense (bool): Predict dense vertices or not.
         
     Returns:
         ndarray: The 2D face landmarks.
         float: The landmarks scale factor calculated using the face bounding box.
     """
-    landmarks = reconstruct_vertex(param)
+    landmarks = reconstruct_vertex(param, dense=dense)
     x, y, w, h = bbox
     scale_x = (w - x) / 120
     scale_y = (h - y) / 120
@@ -320,11 +320,12 @@ def predict_landmarks(param, bbox):
     landmarks[2, :] *= scale
     return landmarks, scale
 
-def predict_pose(img, bbox):
+def predict_pose(img, bbox, dense=False):
     """ Calculates the face pose using the 3DDFA algorithm (https://github.com/cleardusk/3DDFA).
     Parameters:
         img (mat): The input image for the network (cropped and resized to 120).
         bbox (array): The source image face bounding box.
+        dense (bool): Predict dense vertices or not.
         
     Returns:
         float: The pitch value.
@@ -343,7 +344,7 @@ def predict_pose(img, bbox):
             input = input.cuda() # @ReservedAssignment
         param = model(input)
         param = param.squeeze().cpu().numpy().flatten().astype(np.float32)
-    landmarks, factor = predict_landmarks(param, bbox)
+    landmarks, factor = predict_landmarks(param, bbox, dense=dense)
     pitch, yaw, roll, scale, rotation, t3d, cam_matrix = extract_pose_from_param(param)  
     return pitch, yaw, roll, scale, rotation, t3d, cam_matrix, landmarks, factor
 
@@ -363,7 +364,7 @@ def reconstruct_vertex(param, whitening=True, dense=False, transform=True):
 
     if dense:
         vertices = p @ (u + w_shp @ alpha_shp + w_exp @ alpha_exp).reshape(3, -1, order='F') + offset
-
+        
         if transform:
             vertices[1, :] = std_size + 1 - vertices[1, :]
     else:
@@ -394,21 +395,21 @@ def render_colors(vertices, triangles, colors, width, height, channels=3, bg=Non
     
     return img
 
-def rotation_matrix_to_euler_angles(rotation):
-    """ Parses rotation matrix to Euler angles.
-    
+def rotation_matrix_to_euler_angles_2(rotation):
+    """ Computes three Euler angles from rotation matrix.
+     
     Parameters:
         rotation (ndarray): The rotation matrix.
-    
+     
     Returns:
         float: The yaw value.
         float: The pitch value.
         float: The roll value.
     """
     sy = math.sqrt(rotation[0, 0] * rotation[0, 0] +  rotation[1, 0] * rotation[1, 0])
-      
+       
     singular = sy < 1e-6
-  
+   
     if  not singular :
         x = math.atan2(rotation[2, 1] , rotation[2, 2])
         y = math.atan2(-rotation[2, 0], sy)
@@ -417,10 +418,36 @@ def rotation_matrix_to_euler_angles(rotation):
         x = math.atan2(-rotation[1, 2], rotation[1, 1])
         y = math.atan2(-rotation[2, 0], sy)
         z = 0
-         
+          
     yaw, pitch, roll = x * 180 / np.pi, y * 180 / np.pi, z * 180 / np.pi
-     
+      
     return yaw, pitch, roll
+
+def rotation_matrix_to_euler_angles(rotation):
+    """ Computes three Euler angles from rotation matrix.
+     
+    Parameters:
+        rotation (ndarray): The rotation matrix.
+     
+    Returns:
+        float: The yaw value.
+        float: The pitch value.
+        float: The roll value.
+    """
+    if rotation[2, 0] != 1 or rotation[2, 0] != -1:
+        x = math.asin(rotation[2, 0])
+        y = math.atan2(rotation[2, 1] / math.cos(x), rotation[2, 2] / math.cos(x))
+        z = math.atan2(rotation[1, 0] / math.cos(x), rotation[0, 0] / math.cos(x))
+    else:
+        z = 0
+        if rotation[2, 0] == -1:
+            x = np.pi / 2
+            y = z + math.atan2(rotation[0, 1], rotation[0, 2])
+        else:
+            x = -np.pi / 2
+            y = -z + math.atan2(-rotation[0, 1], -rotation[0, 2])
+
+    return x, y, z
 
 def similarity_transform(vertices, rotation, translation, scale):
     """ Calculates the new vertices using the pose information.
@@ -433,6 +460,13 @@ def similarity_transform(vertices, rotation, translation, scale):
     Returns:
         ndarray: The new 3DMM vertices.
     """
+    
+#      if dense:
+#         vertices = p @ (u + w_shp @ alpha_shp + w_exp @ alpha_exp).reshape(3, -1, order='F') + offset
+# 
+#         if transform:
+#             vertices[1, :] = std_size + 1 - vertices[1, :]
+    
     translation = np.squeeze(np.array(translation, dtype = np.float32))
     transform_vertices = scale * vertices.dot(rotation) + translation[np.newaxis, :]
     return transform_vertices

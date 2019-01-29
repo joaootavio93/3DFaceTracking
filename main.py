@@ -14,7 +14,7 @@ def main():
     font = cv2.FONT_HERSHEY_SIMPLEX
     bottom_left_corner_of_text = (10, 30)
     font_scale = 1
-    font_color = (255,255,255)
+    font_color = (255, 255, 255)
     line_type = 2
     
     _, frame = cap.read()
@@ -30,11 +30,11 @@ def main():
         end = time.time()    
         fps  = frames_count / (end - start)
         
+        frame = ft.track_faces(frame)
+        
         cv2.putText(frame, 'FPS: ' + str(int(fps)), bottom_left_corner_of_text, font, font_scale, font_color, line_type)
         
-        img = ft.track_faces(frame, show_predicted_lmks=True, show_face_fits=True)
-        
-        cv2.imshow('source', img)
+        cv2.imshow('face', frame)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

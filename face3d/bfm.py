@@ -63,15 +63,9 @@ class MorphabelModel(object):
             texture = np.random.rand(self.n_tex_para, 1)
         return texture
     
-    def fit(self, keypoints, keypoints_index, max_iter=4, is_show=False):
-        if is_show:
-            fitted_shape, fitted_expression, scale, rotation, translation = fit_points_for_show(keypoints, keypoints_index, self.model, n_shape=self.n_shape_para, n_expression=self.n_exp_para, max_iter=max_iter)
-            angles = np.zeros((rotation.shape[0], 3))
-            for i in range(rotation.shape[0]):
-                angles[i] = fa.rotation_matrix_to_euler_angles(rotation[i])
-        else:
-            fitted_shape, fitted_expression, scale, rotation, translation = fit_points(keypoints, keypoints_index, self.model, n_shape=self.n_shape_para, n_expression=self.n_exp_para, max_iter=max_iter)
-            angles = fa.rotation_matrix_to_euler_angles(rotation)
+    def fit(self, keypoints, keypoints_index, max_iter=4):   
+        fitted_shape, fitted_expression, scale, rotation, translation = fit_points(keypoints, keypoints_index, self.model, n_shape=self.n_shape_para, n_expression=self.n_exp_para, max_iter=max_iter)
+        angles = fa.rotation_matrix_to_euler_angles_2(rotation)
         return fitted_shape, fitted_expression, scale, angles, translation
     
     def generate_colors(self, texture):
@@ -184,46 +178,6 @@ def fit_points(keypoints, keypoints_index, model, n_shape, n_expression, max_ite
         shape = estimate_shape(keypoints, shapeMU, shapePC, model['shapeEV'][:n_shape,:], expression, scale, rotation, translation[:2], lamb=40)
 
     return shape, ep, scale, rotation, translation
-    
-def fit_points_for_show(keypoints, keypoints_index, model, n_shape, n_expression, max_iter = 4):
-    keypoints = keypoints.copy().T
-    
-    shape = np.zeros((n_shape, 1), dtype = np.float32)
-    ep = np.zeros((n_expression, 1), dtype = np.float32)
-
-    keypoints_index_all = np.tile(keypoints_index[np.newaxis, :], [3, 1]) * 3
-    keypoints_index_all[1, :] += 1
-    keypoints_index_all[2, :] += 2
-    valid_index = keypoints_index_all.flatten('F')
-
-    shapeMU = model['shapeMU'][valid_index, :]
-    shapePC = model['shapePC'][valid_index, :n_shape]
-    expPC = model['expPC'][valid_index, :n_expression]
-
-    scale = 4e-04
-    rotation = fa.euler_angles_to_rotation_matrix([0, 0, 0])
-    translation = [0, 0, 0]
-    lsp = []; lep = []; ls = []; lR = []; lt = []
-    
-    for _ in range(max_iter):
-        X = shapeMU + shapePC.dot(shape) + expPC.dot(ep)
-        X = np.reshape(X, [int(len(X) / 3), 3]).T
-        lsp.append(shape); lep.append(ep); ls.append(scale), lR.append(rotation), lt.append(translation)
-        
-        cam_matrix = fa.estimate_affine_matrix(X.T, keypoints.T)
-        scale, rotation, translation = fa.decompose_camera_matrix(cam_matrix)
-        lsp.append(shape); lep.append(ep); ls.append(scale), lR.append(rotation), lt.append(translation)
-
-        shape = shapePC.dot(shape)
-        shape = np.reshape(shape, [int(len(shape) / 3), 3]).T
-        expression = estimate_expression(keypoints, shapeMU, expPC, model['expEV'][:n_expression,:], shape, scale, rotation, translation[:2], lamb=20)
-        lsp.append(shape); lep.append(expression); ls.append(scale), lR.append(rotation), lt.append(translation)
-
-        expression = expPC.dot(expression)
-        expression = np.reshape(expression, [int(len(expression) / 3), 3]).T
-        shape = estimate_shape(keypoints, shapeMU, shapePC, model['shapeEV'][:n_shape,:], expression, scale, rotation, translation[:2], lamb=40)
-
-    return np.array(lsp), np.array(lep), np.array(ls), np.array(lR), np.array(lt)
        
 def load(model_path):
     c = sio.loadmat(model_path)

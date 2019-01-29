@@ -103,7 +103,7 @@ def detect_faces(img, detector=Face_Detector.DLIB):
         faces = faced_detector.predict(rgb_img, faced_thresh)
     elif detector == Face_Detector.DLIB:
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = dlib_detector(gray_img, 0)
+        faces = dlib_detector(gray_img, 1)
     
     for face in faces:
         if detector == Face_Detector.FACED:

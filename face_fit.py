@@ -23,6 +23,7 @@ colors = np.minimum(np.maximum(colors, 0), 1)
 
 def fit_3dmm(rotation, translation, scale, width, height, max_iter=3):
     """ Fits a 3D face morphable model on a 2D face.
+    
     Parameters:
         rotation (ndarray): The 2D face rotation matrix.
         translation (list): The 2D face translation vector.
@@ -30,10 +31,11 @@ def fit_3dmm(rotation, translation, scale, width, height, max_iter=3):
         width (int): The source image width.
         height (int): The source image height.
         max_iter (int): The number of fits iterates.
+        
     Returns:
         mat: The fitted 3DMM image with alpha channel.
         ndarray: The fitted 3DMM 68 keypoints.
-    """
+    """    
     transform_vertices = fa.similarity_transform(vertices, rotation, translation, scale)
 
     keypoints = transform_vertices[morphable_model.kpt_ind, : 2]
@@ -44,7 +46,7 @@ def fit_3dmm(rotation, translation, scale, width, height, max_iter=3):
     fitted_vertices = morphable_model.generate_vertices(fit_shape, fit_exp)
     fit_rotation = fa.euler_angles_to_rotation_matrix(fit_rotation)
     
-    transform_vertices = fa.similarity_transform(fitted_vertices, fit_rotation, fit_t3d, fit_scale)     
+    transform_vertices = fa.similarity_transform(fitted_vertices, fit_rotation, [0, 0, 0], fit_scale)     
     img_2d_vertices = fa.to_coord_system(transform_vertices, width, height)    
     
     fit_kpts = img_2d_vertices[morphable_model.kpt_ind, : 2]
@@ -55,6 +57,6 @@ def fit_3dmm(rotation, translation, scale, width, height, max_iter=3):
     fit_img = fit_img.astype('uint8')
     fit_img = cv2.cvtColor(fit_img, cv2.COLOR_RGB2BGR)
     
-    fit_alpha_img = utils.add_alpha_channel(fit_img)
+    fit_img = utils.add_alpha_channel(fit_img)
 
-    return fit_alpha_img, fit_kpts
+    return fit_img, fit_kpts
